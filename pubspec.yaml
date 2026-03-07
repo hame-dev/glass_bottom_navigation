@@ -1,7 +1,7 @@
 name: glass_bottom_navigation
 description: A customizable frosted glass bottom navigation bar with optional search action.
 version: 0.1.0
-homepage: https://github.com/yourusername/glass_bottom_navigation  # Update with your repo or site
+homepage: https://github.com/hame-dev/glass_bottom_navigation.git 
 
 environment:
   sdk: ^3.11.0
