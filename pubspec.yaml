@@ -1,0 +1,19 @@
+name: glass_bottom_navigation
+description: A customizable frosted glass bottom navigation bar with optional search action.
+version: 0.1.0
+homepage: https://github.com/yourusername/glass_bottom_navigation  # Update with your repo or site
+
+environment:
+  sdk: ^3.11.0
+  flutter: ">=1.17.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
