@@ -1,6 +1,6 @@
 name: glass_bottom_navigation
-description: A customizable frosted glass bottom navigation bar with optional search action.
-version: 0.1.0
+description: A customizable Liquid Glass bottom navigation bar with native iOS 26 support and Flutter fallback glass effects.
+version: 0.2.0
 homepage: https://github.com/hame-dev/glass_bottom_navigation.git 
 
 environment:
