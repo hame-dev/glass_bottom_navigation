@@ -166,13 +166,13 @@ class GlassBottomNavStyle {
 
   const GlassBottomNavStyle({
     this.pillTint = const Color(0xFFFFFFFF),
-    this.pillBlurSigma = 46,
+    this.pillBlurSigma = 26,
     this.pillFilmStart = 0.42,
     this.pillFilmEnd = 0.26,
     this.pillBorderOpacity = 0.62,
     this.showSpecularDot = false,
     this.pillFrostOpacity = 0.09,
-    this.backdropSaturation = 1.5,
+    this.backdropSaturation = 1.0,
     this.accent = const Color(0xFFFF2D55),
     this.height = 68,
     this.radius = 26,
@@ -184,7 +184,7 @@ class GlassBottomNavStyle {
     this.selectedHeightFactor = 1,
     this.selectedInsetPx = 1,
     this.selectedCornerAuto = true,
-    this.selectedBlurSigma = 44,
+    this.selectedBlurSigma = 26,
     this.selectedStartOpacity = 0.50,
     this.selectedEndOpacity = 0.30,
     this.selectedBorderOpacity = 0.66,
@@ -947,9 +947,9 @@ class _FrostedPill extends StatelessWidget {
       child: Stack(
         children: [
           Positioned.fill(
-            top: 10,
             child: DecoratedBox(
               decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(radius),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.18),
@@ -961,103 +961,104 @@ class _FrostedPill extends StatelessWidget {
               ),
             ),
           ),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(radius),
-            child: BackdropFilter(
-              filter: _glassBackdrop(blurSigma, saturation),
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 4),
-                padding: padding,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(radius),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      tint.withValues(alpha: filmStart),
-                      tint.withValues(alpha: filmEnd),
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(radius),
+              child: BackdropFilter(
+                filter: _glassBackdrop(blurSigma, saturation),
+                child: Container(
+                  padding: padding,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(radius),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        tint.withValues(alpha: filmStart),
+                        tint.withValues(alpha: filmEnd),
+                      ],
+                    ),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: rimOpacity),
+                      width: 0.7,
+                    ),
+                  ),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: frostOpacity),
+                            borderRadius: BorderRadius.circular(radius),
+                          ),
+                        ),
+                      ),
+                      Positioned.fill(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(radius),
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              stops: const [0.0, 0.30, 0.70, 1.0],
+                              colors: [
+                                Colors.white.withValues(alpha: 0.05),
+                                Colors.transparent,
+                                Colors.transparent,
+                                Colors.white.withValues(alpha: 0.0),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned.fill(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(radius),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              stops: const [0.0, 0.30, 0.80, 1.0],
+                              colors: [
+                                Colors.white.withValues(alpha: 0.05),
+                                Colors.transparent,
+                                Colors.transparent,
+                                Colors.black.withValues(alpha: 0.015),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            painter: _GrainPainter(opacity: 0.025, count: 700),
+                          ),
+                        ),
+                      ),
+                      if (showSpecularDot)
+                        Positioned(
+                          top: 6,
+                          left: 8,
+                          child: Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.95),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.white.withValues(alpha: 0.45),
+                                  blurRadius: 10,
+                                  spreadRadius: 1.2,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      child,
                     ],
                   ),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: rimOpacity),
-                    width: 0.7,
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: frostOpacity),
-                          borderRadius: BorderRadius.circular(radius),
-                        ),
-                      ),
-                    ),
-                    Positioned.fill(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(radius),
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            stops: const [0.0, 0.30, 0.70, 1.0],
-                            colors: [
-                              Colors.white.withValues(alpha: 0.05),
-                              Colors.transparent,
-                              Colors.transparent,
-                              Colors.white.withValues(alpha: 0.0),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Positioned.fill(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(radius),
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            stops: const [0.0, 0.30, 0.80, 1.0],
-                            colors: [
-                              Colors.white.withValues(alpha: 0.05),
-                              Colors.transparent,
-                              Colors.transparent,
-                              Colors.black.withValues(alpha: 0.015),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const Positioned.fill(
-                      child: IgnorePointer(
-                        child: CustomPaint(
-                          painter: _GrainPainter(opacity: 0.025, count: 700),
-                        ),
-                      ),
-                    ),
-                    if (showSpecularDot)
-                      Positioned(
-                        top: 6,
-                        left: 8,
-                        child: Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white.withValues(alpha: 0.95),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.white.withValues(alpha: 0.45),
-                                blurRadius: 10,
-                                spreadRadius: 1.2,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    child,
-                  ],
                 ),
               ),
             ),
