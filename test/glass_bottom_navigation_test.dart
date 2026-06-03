@@ -15,6 +15,8 @@ void main() {
     required int currentIndex,
     required ValueChanged<int> onTap,
     VoidCallback? onSearchTap,
+    List<GlassActionButtonItem> leadingActions = const [],
+    List<GlassActionButtonItem> trailingActions = const [],
     double? width,
     double? height,
   }) {
@@ -27,6 +29,8 @@ void main() {
             currentIndex: currentIndex,
             onTap: onTap,
             onSearchTap: onSearchTap,
+            leadingActions: leadingActions,
+            trailingActions: trailingActions,
             width: width,
             height: height,
           ),
@@ -139,6 +143,106 @@ void main() {
     await tester.pump();
 
     expect(tappedIndex, 1);
+  });
+
+  testWidgets('renders and handles leading and trailing action buttons', (
+    tester,
+  ) async {
+    var backTapped = false;
+    var moreTapped = false;
+
+    await tester.pumpWidget(
+      host(
+        items: buildItems(3),
+        currentIndex: 0,
+        onTap: (_) {},
+        leadingActions: [
+          GlassActionButtonItem.back(onTap: () => backTapped = true),
+        ],
+        trailingActions: [
+          GlassActionButtonItem.more(onTap: () => moreTapped = true),
+        ],
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.more_horiz_rounded));
+    await tester.pump();
+
+    expect(backTapped, isTrue);
+    expect(moreTapped, isTrue);
+  });
+
+  testWidgets('supports a standalone action button', (tester) async {
+    var tapped = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: GlassActionButton(
+              item: GlassActionButtonItem.back(onTap: () => tapped = true),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
+    await tester.pump();
+
+    expect(tapped, isTrue);
+  });
+
+  testWidgets('supports a standalone action button row', (tester) async {
+    var moreTapped = false;
+    var searchTapped = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: GlassActionButtonRow(
+              actions: [
+                GlassActionButtonItem.more(onTap: () => moreTapped = true),
+                GlassActionButtonItem.search(onTap: () => searchTapped = true),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.more_horiz_rounded));
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.search_rounded));
+    await tester.pump();
+
+    expect(moreTapped, isTrue);
+    expect(searchTapped, isTrue);
+  });
+
+  testWidgets('does not throw when bottom bar actions leave little nav width', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      host(
+        items: buildItems(4),
+        currentIndex: 0,
+        onTap: (_) {},
+        leadingActions: [GlassActionButtonItem.back(onTap: () {})],
+        trailingActions: [GlassActionButtonItem.more(onTap: () {})],
+        onSearchTap: () {},
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const ValueKey('glass_bottom_bar_pill')), findsOneWidget);
   });
 
   testWidgets('centers without search and shifts for trailing search layout', (

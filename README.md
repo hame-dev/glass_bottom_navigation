@@ -6,6 +6,11 @@ A customizable frosted-glass bottom navigation bar for Flutter.
 
 - Simple API: pass `items`, `currentIndex`, and `onTap`
 - Optional built-in search action via `onSearchTap`
+- Optional leading and trailing glass action buttons such as back, more, close,
+  and custom icon buttons
+- iOS 26+ native Liquid Glass bottom bar and action buttons when built with the
+  latest Apple SDK; Android and older iOS keep the Flutter frosted-glass
+  fallback
 - Optional `width` and `height` overrides
 - Auto layout behavior:
   - Without search: centered bar
@@ -51,6 +56,65 @@ GlassBottomBar(
 )
 ```
 
+For iOS 26+ native rendering, pass `nativeSymbolName` on `GlassBarItem` and
+custom action buttons so UIKit can render SF Symbols. Also make sure the host
+app does not opt into UI compatibility mode. If
+`UIDesignRequiresCompatibility` is present in `Info.plist`, set it to `false`
+while testing the latest native design.
+
+### Use glass action buttons
+
+```dart
+Column(
+  children: [
+    GlassActionButton(
+      item: GlassActionButtonItem.back(
+        onTap: () => Navigator.maybePop(context),
+      ),
+    ),
+    const Spacer(),
+    GlassBottomBar(
+      items: items,
+      currentIndex: currentIndex,
+      onTap: onTap,
+    ),
+  ],
+)
+```
+
+Action buttons can also be grouped anywhere in your layout:
+
+```dart
+GlassActionButtonRow(
+  actions: [
+    GlassActionButtonItem.more(onTap: openMenu),
+    GlassActionButtonItem(
+      type: GlassActionIcon.custom,
+      icon: Icons.tune_rounded,
+      nativeSymbolName: 'slider.horizontal.3',
+      semanticLabel: 'Filters',
+      onTap: openFilters,
+    ),
+  ],
+)
+```
+
+Or attached directly beside the bottom bar when the screen has enough width:
+
+```dart
+GlassBottomBar(
+  items: items,
+  currentIndex: currentIndex,
+  onTap: onTap,
+  leadingActions: [
+    GlassActionButtonItem.back(onTap: () => Navigator.maybePop(context)),
+  ],
+  trailingActions: [
+    GlassActionButtonItem.more(onTap: openMenu),
+  ],
+)
+```
+
 ### Customize style
 
 ```dart
@@ -71,8 +135,8 @@ GlassBottomBar(
 A full runnable demo exists in `/example` and includes:
 
 - 2-tab, 3-tab, and 4-tab setups
-- Search on/off toggle
-- Visual behavior for centered vs trailing-search layouts
+- Standalone top glass action buttons
+- Bottom navigation used independently from action buttons
 
 ## Screenshots / GIFs
 

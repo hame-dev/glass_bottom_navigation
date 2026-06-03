@@ -28,9 +28,21 @@ class DemoHomePage extends StatefulWidget {
 
 class _DemoHomePageState extends State<DemoHomePage> {
   static const _items = [
-    GlassBarItem(icon: Icons.home_rounded, label: 'Home'),
-    GlassBarItem(icon: Icons.chat_rounded, label: 'Chat'),
-    GlassBarItem(icon: Icons.settings_rounded, label: 'Settings'),
+    GlassBarItem(
+      icon: Icons.home_rounded,
+      label: 'Home',
+      nativeSymbolName: 'house.fill',
+    ),
+    GlassBarItem(
+      icon: Icons.chat_rounded,
+      label: 'Chat',
+      nativeSymbolName: 'bubble.left.fill',
+    ),
+    GlassBarItem(
+      icon: Icons.settings_rounded,
+      label: 'Settings',
+      nativeSymbolName: 'gearshape.fill',
+    ),
   ];
 
   int _currentIndex = 0;
@@ -41,22 +53,60 @@ class _DemoHomePageState extends State<DemoHomePage> {
 
     return Scaffold(
       extendBody: true,
-      backgroundColor: const Color(0xFFF3F4F6),
-      body: SafeArea(
-        child: Center(
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 220),
-            child: Text(
-              activeItem.label,
-              key: ValueKey(activeItem.label),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Color(0xFF111111),
-                fontSize: 36,
-                fontWeight: FontWeight.w700,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFFF6FD8), Color(0xFF3813C2), Color(0xFF21D4FD)],
+          ),
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + 20,
+              left: 24,
+              right: 24,
+              child: Row(
+                children: [
+                  GlassActionButton(
+                    item: GlassActionButtonItem.back(
+                      onTap: () => _showMessage(context, 'Back tapped'),
+                      nativeStyle: GlassNativeButtonStyle.prominent,
+                    ),
+                  ),
+                  const Spacer(),
+                  GlassActionButtonRow(
+                    actions: [
+                      GlassActionButtonItem.more(
+                        onTap: () => _showMessage(context, 'More tapped'),
+                        nativeStyle: GlassNativeButtonStyle.prominent,
+                      ),
+                      GlassActionButtonItem.search(
+                        onTap: () => _showMessage(context, 'Search tapped'),
+                        nativeStyle: GlassNativeButtonStyle.prominent,
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-          ),
+            Center(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: Text(
+                  activeItem.label,
+                  key: ValueKey(activeItem.label),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 36,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
       bottomNavigationBar: SafeArea(
@@ -68,14 +118,15 @@ class _DemoHomePageState extends State<DemoHomePage> {
             currentIndex: _currentIndex,
             onTap: (index) => setState(() => _currentIndex = index),
             style: const GlassBottomNavStyle(showSpecularDot: false),
-            onSearchTap: () {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('Search tapped')));
-            },
           ),
         ),
       ),
     );
+  }
+
+  void _showMessage(BuildContext context, String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }

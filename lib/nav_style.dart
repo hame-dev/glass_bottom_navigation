@@ -1,13 +1,125 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+const _nativeGlassChannel = MethodChannel('glass_bottom_navigation');
+const _nativeGlassButtonViewType =
+    'glass_bottom_navigation/native_glass_button';
+const _nativeGlassBarViewType = 'glass_bottom_navigation/native_glass_bar';
+
+/// Builds the backdrop filter for the faux-glass surfaces: a gaussian blur with
+/// an optional saturation boost composed on top. Real iOS Liquid Glass amplifies
+/// the colour of the content behind it, not just blurs it, so a saturation > 1
+/// gives the fallback that same vibrancy. [saturation] == 1 is a plain blur.
+ImageFilter _glassBackdrop(double sigma, double saturation) {
+  final blur = ImageFilter.blur(sigmaX: sigma, sigmaY: sigma);
+  if (saturation == 1.0) {
+    return blur;
+  }
+  return ImageFilter.compose(
+    outer: ColorFilter.matrix(_saturationMatrix(saturation)),
+    inner: blur,
+  );
+}
+
+/// A 5x4 colour matrix that scales saturation around luminance-weighted grey.
+List<double> _saturationMatrix(double s) {
+  const lumR = 0.2126;
+  const lumG = 0.7152;
+  const lumB = 0.0722;
+  final sr = (1 - s) * lumR;
+  final sg = (1 - s) * lumG;
+  final sb = (1 - s) * lumB;
+  return <double>[
+    sr + s, sg, sb, 0, 0, //
+    sr, sg + s, sb, 0, 0, //
+    sr, sg, sb + s, 0, 0, //
+    0, 0, 0, 1, 0, //
+  ];
+}
+
+enum GlassActionIcon {
+  back,
+  close,
+  search,
+  more,
+  add,
+  settings,
+  favorite,
+  share,
+  custom,
+}
+
+enum GlassActionButtonMode { flutter, nativeLiquidGlassOnIOS26 }
+
+enum GlassNativeButtonStyle { regular, prominent, clear, prominentClear }
+
+class GlassActionButtonItem {
+  final GlassActionIcon type;
+  final IconData? icon;
+  final String? nativeSymbolName;
+  final VoidCallback onTap;
+  final String? semanticLabel;
+  final GlassNativeButtonStyle nativeStyle;
+
+  const GlassActionButtonItem({
+    required this.type,
+    required this.onTap,
+    this.icon,
+    this.nativeSymbolName,
+    this.semanticLabel,
+    this.nativeStyle = GlassNativeButtonStyle.regular,
+  }) : assert(
+         type != GlassActionIcon.custom || icon != null,
+         'Custom action buttons require an icon.',
+       );
+
+  const GlassActionButtonItem.back({
+    required this.onTap,
+    this.semanticLabel = 'Back',
+    this.nativeStyle = GlassNativeButtonStyle.regular,
+  }) : type = GlassActionIcon.back,
+       nativeSymbolName = 'chevron.backward',
+       icon = Icons.arrow_back_ios_new_rounded;
+
+  const GlassActionButtonItem.close({
+    required this.onTap,
+    this.semanticLabel = 'Close',
+    this.nativeStyle = GlassNativeButtonStyle.regular,
+  }) : type = GlassActionIcon.close,
+       nativeSymbolName = 'xmark',
+       icon = Icons.close_rounded;
+
+  const GlassActionButtonItem.search({
+    required this.onTap,
+    this.semanticLabel = 'Search',
+    this.nativeStyle = GlassNativeButtonStyle.regular,
+  }) : type = GlassActionIcon.search,
+       nativeSymbolName = 'magnifyingglass',
+       icon = Icons.search_rounded;
+
+  const GlassActionButtonItem.more({
+    required this.onTap,
+    this.semanticLabel = 'More',
+    this.nativeStyle = GlassNativeButtonStyle.regular,
+  }) : type = GlassActionIcon.more,
+       nativeSymbolName = 'ellipsis',
+       icon = Icons.more_horiz_rounded;
+}
 
 class GlassBarItem {
   final IconData icon;
   final String label;
+  final String? nativeSymbolName;
 
-  const GlassBarItem({required this.icon, required this.label});
+  const GlassBarItem({
+    required this.icon,
+    required this.label,
+    this.nativeSymbolName,
+  });
 }
 
 class GlassBottomNavStyle {
@@ -18,6 +130,11 @@ class GlassBottomNavStyle {
   final double pillBorderOpacity;
   final bool showSpecularDot;
   final double pillFrostOpacity;
+
+  /// Saturation multiplier applied to the content behind the faux-glass surfaces
+  /// (bar + selected pill). > 1 amplifies colour like real Liquid Glass; 1 is a
+  /// plain blur. Has no effect on the iOS 26 native path.
+  final double backdropSaturation;
 
   final Color accent;
   final double height;
@@ -45,15 +162,17 @@ class GlassBottomNavStyle {
   final double searchButtonBorderWidth;
   final double searchGap;
   final IconData searchIcon;
+  final GlassActionButtonMode actionButtonMode;
 
   const GlassBottomNavStyle({
     this.pillTint = const Color(0xFFFFFFFF),
     this.pillBlurSigma = 46,
-    this.pillFilmStart = 0.26,
-    this.pillFilmEnd = 0.12,
-    this.pillBorderOpacity = 0.18,
+    this.pillFilmStart = 0.32,
+    this.pillFilmEnd = 0.18,
+    this.pillBorderOpacity = 0.42,
     this.showSpecularDot = false,
     this.pillFrostOpacity = 0.06,
+    this.backdropSaturation = 1.5,
     this.accent = const Color(0xFFFF2D55),
     this.height = 68,
     this.radius = 26,
@@ -66,18 +185,19 @@ class GlassBottomNavStyle {
     this.selectedInsetPx = 1,
     this.selectedCornerAuto = true,
     this.selectedBlurSigma = 44,
-    this.selectedStartOpacity = 0.30,
-    this.selectedEndOpacity = 0.16,
-    this.selectedBorderOpacity = 0.26,
-    this.selectedFrostOpacity = 0.10,
+    this.selectedStartOpacity = 0.42,
+    this.selectedEndOpacity = 0.24,
+    this.selectedBorderOpacity = 0.50,
+    this.selectedFrostOpacity = 0.14,
     this.selectedRadialOpacity = 0.14,
     this.selectedRadialRadiusFactor = 0.90,
     this.selectedRadialCenter = const Alignment(-0.020, -0.20),
-    this.searchButtonSize = 54,
+    this.searchButtonSize = 56,
     this.searchButtonBlur = 48,
     this.searchButtonBorderWidth = 1.4,
     this.searchGap = 12,
     this.searchIcon = Icons.search_rounded,
+    this.actionButtonMode = GlassActionButtonMode.nativeLiquidGlassOnIOS26,
   });
 
   GlassBottomNavStyle copyWith({
@@ -88,6 +208,7 @@ class GlassBottomNavStyle {
     double? pillBorderOpacity,
     bool? showSpecularDot,
     double? pillFrostOpacity,
+    double? backdropSaturation,
     Color? accent,
     double? height,
     double? radius,
@@ -112,6 +233,7 @@ class GlassBottomNavStyle {
     double? searchButtonBorderWidth,
     double? searchGap,
     IconData? searchIcon,
+    GlassActionButtonMode? actionButtonMode,
   }) {
     return GlassBottomNavStyle(
       pillTint: pillTint ?? this.pillTint,
@@ -121,6 +243,7 @@ class GlassBottomNavStyle {
       pillBorderOpacity: pillBorderOpacity ?? this.pillBorderOpacity,
       showSpecularDot: showSpecularDot ?? this.showSpecularDot,
       pillFrostOpacity: pillFrostOpacity ?? this.pillFrostOpacity,
+      backdropSaturation: backdropSaturation ?? this.backdropSaturation,
       accent: accent ?? this.accent,
       height: height ?? this.height,
       radius: radius ?? this.radius,
@@ -149,6 +272,7 @@ class GlassBottomNavStyle {
           searchButtonBorderWidth ?? this.searchButtonBorderWidth,
       searchGap: searchGap ?? this.searchGap,
       searchIcon: searchIcon ?? this.searchIcon,
+      actionButtonMode: actionButtonMode ?? this.actionButtonMode,
     );
   }
 }
@@ -158,6 +282,8 @@ class GlassBottomBar extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
   final VoidCallback? onSearchTap;
+  final List<GlassActionButtonItem> leadingActions;
+  final List<GlassActionButtonItem> trailingActions;
   final GlassBottomNavStyle style;
   final double? width;
   final double? height;
@@ -168,6 +294,8 @@ class GlassBottomBar extends StatefulWidget {
     required this.currentIndex,
     required this.onTap,
     this.onSearchTap,
+    this.leadingActions = const [],
+    this.trailingActions = const [],
     this.style = const GlassBottomNavStyle(),
     this.width,
     this.height,
@@ -217,26 +345,37 @@ class _GlassBottomBarState extends State<GlassBottomBar>
   @override
   Widget build(BuildContext context) {
     final style = widget.style;
-    final hasSearch = widget.onSearchTap != null;
+    final trailingActions = [
+      ...widget.trailingActions,
+      if (widget.onSearchTap != null)
+        GlassActionButtonItem(
+          type: GlassActionIcon.search,
+          icon: style.searchIcon,
+          semanticLabel: 'Search',
+          onTap: widget.onSearchTap!,
+        ),
+    ];
+    final actionCount = widget.leadingActions.length + trailingActions.length;
+    final actionTotal = actionCount == 0
+        ? 0.0
+        : (actionCount * style.searchButtonSize) +
+              (math.max(0, actionCount) * style.searchGap);
 
-    return LayoutBuilder(
+    final flutterBar = LayoutBuilder(
       builder: (context, constraints) {
         final availableWidth = constraints.hasBoundedWidth
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width;
 
-        final trailingTotal = hasSearch
-            ? style.searchButtonSize + style.searchGap
-            : 0.0;
         final availableForContent = math.max(
           0,
           availableWidth - (2 * style.edgePadding),
         );
-        final maxBarWidth = math.max(0, availableForContent - trailingTotal);
+        final maxBarWidth = math.max(0, availableForContent - actionTotal);
         final targetBarWidth =
             availableWidth * style.widthFactor -
             (2 * style.edgePadding) -
-            trailingTotal;
+            actionTotal;
 
         const minBarWidth = 160.0;
         final effectiveMin = math.min(minBarWidth, maxBarWidth);
@@ -255,6 +394,10 @@ class _GlassBottomBarState extends State<GlassBottomBar>
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(width: style.edgePadding),
+            for (final action in widget.leadingActions) ...[
+              _ActionButtonSlot(item: action, style: style, height: barHeight),
+              SizedBox(width: style.searchGap),
+            ],
             _FrostedPill(
               key: const ValueKey('glass_bottom_bar_pill'),
               width: barWidth,
@@ -262,6 +405,7 @@ class _GlassBottomBarState extends State<GlassBottomBar>
               radius: style.radius,
               padding: style.barPadding,
               blurSigma: style.pillBlurSigma,
+              saturation: style.backdropSaturation,
               filmStart: style.pillFilmStart,
               filmEnd: style.pillFilmEnd,
               rimOpacity: style.pillBorderOpacity,
@@ -287,30 +431,287 @@ class _GlassBottomBarState extends State<GlassBottomBar>
                 selectedRadialOpacity: style.selectedRadialOpacity,
                 selectedRadialRadiusFactor: style.selectedRadialRadiusFactor,
                 selectedRadialCenter: style.selectedRadialCenter,
+                backdropSaturation: style.backdropSaturation,
                 fromIndex: _fromIndex,
                 toIndex: _toIndex,
               ),
             ),
-            if (hasSearch) SizedBox(width: style.searchGap),
-            if (hasSearch)
-              SizedBox(
-                width: style.searchButtonSize,
+            for (final action in trailingActions) ...[
+              SizedBox(width: style.searchGap),
+              _ActionButtonSlot(
+                key: action.type == GlassActionIcon.search
+                    ? const ValueKey('glass_bottom_bar_search_button')
+                    : null,
+                item: action,
+                style: style,
                 height: barHeight,
-                child: Center(
-                  child: _GlassCircleButton(
-                    key: const ValueKey('glass_bottom_bar_search_button'),
-                    icon: style.searchIcon,
-                    onTap: widget.onSearchTap!,
-                    size: style.searchButtonSize,
-                    blur: style.searchButtonBlur,
-                    borderWidth: style.searchButtonBorderWidth,
-                  ),
-                ),
               ),
+            ],
             SizedBox(width: style.edgePadding),
           ],
         );
       },
+    );
+
+    if (style.actionButtonMode !=
+            GlassActionButtonMode.nativeLiquidGlassOnIOS26 ||
+        defaultTargetPlatform != TargetPlatform.iOS) {
+      return flutterBar;
+    }
+
+    return _AdaptiveNativeGlassBottomBar(
+      items: widget.items,
+      currentIndex: widget.currentIndex,
+      onTap: widget.onTap,
+      style: style,
+      leadingActions: widget.leadingActions,
+      trailingActions: trailingActions,
+      actionTotal: actionTotal,
+      fallback: flutterBar,
+    );
+  }
+}
+
+class _AdaptiveNativeGlassBottomBar extends StatefulWidget {
+  final List<GlassBarItem> items;
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+  final GlassBottomNavStyle style;
+  final List<GlassActionButtonItem> leadingActions;
+  final List<GlassActionButtonItem> trailingActions;
+  final double actionTotal;
+  final Widget fallback;
+
+  const _AdaptiveNativeGlassBottomBar({
+    required this.items,
+    required this.currentIndex,
+    required this.onTap,
+    required this.style,
+    required this.leadingActions,
+    required this.trailingActions,
+    required this.actionTotal,
+    required this.fallback,
+  });
+
+  @override
+  State<_AdaptiveNativeGlassBottomBar> createState() =>
+      _AdaptiveNativeGlassBottomBarState();
+}
+
+class _AdaptiveNativeGlassBottomBarState
+    extends State<_AdaptiveNativeGlassBottomBar> {
+  static Future<bool>? _supportsNativeLiquidGlass;
+  MethodChannel? _barChannel;
+
+  @override
+  void didUpdateWidget(covariant _AdaptiveNativeGlassBottomBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _sendUpdate();
+  }
+
+  @override
+  void dispose() {
+    _barChannel?.setMethodCallHandler(null);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _supportsNativeLiquidGlass ??= _nativeGlassChannel
+        .invokeMethod<bool>('isLiquidGlassSupported')
+        .then((value) => value ?? false)
+        .catchError((_) => false);
+
+    return FutureBuilder<bool>(
+      future: _supportsNativeLiquidGlass,
+      builder: (context, snapshot) {
+        if (snapshot.data != true) {
+          return widget.fallback;
+        }
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final availableWidth = constraints.hasBoundedWidth
+                ? constraints.maxWidth
+                : MediaQuery.sizeOf(context).width;
+            final availableForContent = math.max(
+              0.0,
+              availableWidth - (2 * widget.style.edgePadding),
+            );
+            final maxBarWidth = math.max(
+              0.0,
+              availableForContent - widget.actionTotal,
+            );
+            final targetBarWidth =
+                availableWidth * widget.style.widthFactor -
+                (2 * widget.style.edgePadding) -
+                widget.actionTotal;
+            const minBarWidth = 160.0;
+            final effectiveMin = math.min(minBarWidth, maxBarWidth);
+            final autoBarWidth = targetBarWidth
+                .clamp(effectiveMin, maxBarWidth)
+                .toDouble();
+            final barWidth = widget.style.widthFactor <= 0
+                ? maxBarWidth
+                : autoBarWidth;
+            final scale = (availableWidth / 390).clamp(0.9, 1.15).toDouble();
+            // Native UITabBar needs enough vertical room to lay the label
+            // below the icon; too short and iOS collapses them together.
+            final autoHeight = (74 * scale).clamp(70.0, 92.0).toDouble();
+            final barHeight =
+                widget.style.height == const GlassBottomNavStyle().height
+                ? autoHeight
+                : math.max(widget.style.height, 70.0);
+
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(width: widget.style.edgePadding),
+                for (final action in widget.leadingActions) ...[
+                  _ActionButtonSlot(
+                    item: action,
+                    style: widget.style,
+                    height: barHeight,
+                  ),
+                  SizedBox(width: widget.style.searchGap),
+                ],
+                SizedBox(
+                  key: const ValueKey('glass_bottom_bar_native_pill'),
+                  width: barWidth,
+                  height: barHeight + 8,
+                  child: UiKitView(
+                    viewType: _nativeGlassBarViewType,
+                    creationParamsCodec: const StandardMessageCodec(),
+                    creationParams: _nativeParams(),
+                    onPlatformViewCreated: (id) {
+                      final channel = MethodChannel(
+                        'glass_bottom_navigation/native_glass_bar_$id',
+                      );
+                      _barChannel?.setMethodCallHandler(null);
+                      _barChannel = channel;
+                      channel.setMethodCallHandler((call) async {
+                        if (call.method == 'tap') {
+                          final index = call.arguments as int;
+                          widget.onTap(index);
+                        }
+                      });
+                      _sendUpdate();
+                    },
+                  ),
+                ),
+                for (final action in widget.trailingActions) ...[
+                  SizedBox(width: widget.style.searchGap),
+                  _ActionButtonSlot(
+                    key: action.type == GlassActionIcon.search
+                        ? const ValueKey('glass_bottom_bar_search_button')
+                        : null,
+                    item: action,
+                    style: widget.style,
+                    height: barHeight,
+                  ),
+                ],
+                SizedBox(width: widget.style.edgePadding),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Map<String, Object?> _nativeParams() {
+    return {
+      'items': widget.items
+          .map(
+            (item) => {
+              'label': item.label,
+              'symbolName': item.nativeSymbolName,
+            },
+          )
+          .toList(),
+      'currentIndex': widget.currentIndex,
+      'accent': widget.style.accent.toARGB32(),
+      'radius': widget.style.radius,
+    };
+  }
+
+  void _sendUpdate() {
+    _barChannel?.invokeMethod<void>('update', _nativeParams());
+  }
+}
+
+class GlassActionButton extends StatelessWidget {
+  final GlassActionButtonItem item;
+  final GlassBottomNavStyle style;
+
+  const GlassActionButton({
+    super.key,
+    required this.item,
+    this.style = const GlassBottomNavStyle(),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _AdaptiveGlassActionButton(
+      item: item,
+      mode: style.actionButtonMode,
+      size: style.searchButtonSize,
+      blur: style.searchButtonBlur,
+      borderWidth: style.searchButtonBorderWidth,
+    );
+  }
+}
+
+class GlassActionButtonRow extends StatelessWidget {
+  final List<GlassActionButtonItem> actions;
+  final GlassBottomNavStyle style;
+  final Axis direction;
+
+  const GlassActionButtonRow({
+    super.key,
+    required this.actions,
+    this.style = const GlassBottomNavStyle(),
+    this.direction = Axis.horizontal,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final children = <Widget>[];
+    for (var i = 0; i < actions.length; i++) {
+      if (i > 0) {
+        children.add(SizedBox(width: style.searchGap, height: style.searchGap));
+      }
+      children.add(GlassActionButton(item: actions[i], style: style));
+    }
+
+    return Flex(
+      direction: direction,
+      mainAxisSize: MainAxisSize.min,
+      children: children,
+    );
+  }
+}
+
+class _ActionButtonSlot extends StatelessWidget {
+  final GlassActionButtonItem item;
+  final GlassBottomNavStyle style;
+  final double height;
+
+  const _ActionButtonSlot({
+    super.key,
+    required this.item,
+    required this.style,
+    required this.height,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: style.searchButtonSize,
+      height: height,
+      child: Center(
+        child: GlassActionButton(item: item, style: style),
+      ),
     );
   }
 }
@@ -334,6 +735,7 @@ class _BarContent extends StatelessWidget {
   final double selectedRadialOpacity;
   final double selectedRadialRadiusFactor;
   final Alignment selectedRadialCenter;
+  final double backdropSaturation;
   final int fromIndex;
   final int toIndex;
 
@@ -349,6 +751,7 @@ class _BarContent extends StatelessWidget {
     required this.selectedInsetPx,
     required this.selectedCornerAuto,
     required this.selectedBlurSigma,
+    required this.backdropSaturation,
     required this.selectedStartOpacity,
     required this.selectedEndOpacity,
     required this.selectedBorderOpacity,
@@ -375,9 +778,10 @@ class _BarContent extends StatelessWidget {
             .clamp(minSelH, maxSelH)
             .toDouble();
 
-        final availW = math.max(0, itemW - (2 * selectedSideInsetPx));
+        final availW = math.max(0.0, itemW - (2 * selectedSideInsetPx));
+        final minSelW = math.min(48.0, availW);
         final selW = (availW * selectedWidthFactor)
-            .clamp(48.0, availW)
+            .clamp(minSelW, availW)
             .toDouble();
         final left =
             currentIndex * itemW + selectedSideInsetPx + ((availW - selW) / 2);
@@ -404,6 +808,7 @@ class _BarContent extends StatelessWidget {
                     height: selH,
                     corner: corner,
                     blurSigma: selectedBlurSigma,
+                    saturation: backdropSaturation,
                     startOpacity: selectedStartOpacity,
                     endOpacity: selectedEndOpacity,
                     borderOpacity: selectedBorderOpacity,
@@ -422,11 +827,9 @@ class _BarContent extends StatelessWidget {
               children: List.generate(items.length, (i) {
                 final selected = i == currentIndex;
 
-                return InkWell(
+                return _Pressable(
                   onTap: () => onTap(i),
-                  borderRadius: BorderRadius.circular(20),
-                  splashColor: Colors.transparent,
-                  highlightColor: Colors.transparent,
+                  borderRadius: BorderRadius.circular(corner),
                   child: SizedBox(
                     width: itemW,
                     height: constraints.maxHeight,
@@ -512,6 +915,7 @@ class _FrostedPill extends StatelessWidget {
   final Widget child;
   final Color tint;
   final double blurSigma;
+  final double saturation;
   final double filmStart;
   final double filmEnd;
   final double rimOpacity;
@@ -527,6 +931,7 @@ class _FrostedPill extends StatelessWidget {
     required this.child,
     required this.tint,
     required this.blurSigma,
+    this.saturation = 1.0,
     required this.filmStart,
     required this.filmEnd,
     required this.rimOpacity,
@@ -559,7 +964,7 @@ class _FrostedPill extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(radius),
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+              filter: _glassBackdrop(blurSigma, saturation),
               child: Container(
                 margin: const EdgeInsets.only(bottom: 4),
                 padding: padding,
@@ -597,10 +1002,10 @@ class _FrostedPill extends StatelessWidget {
                             end: Alignment.bottomRight,
                             stops: const [0.0, 0.12, 0.88, 1.0],
                             colors: [
-                              Colors.white.withValues(alpha: 0.22),
+                              Colors.white.withValues(alpha: 0.30),
                               Colors.transparent,
                               Colors.transparent,
-                              Colors.white.withValues(alpha: 0.12),
+                              Colors.white.withValues(alpha: 0.18),
                             ],
                           ),
                         ),
@@ -613,12 +1018,31 @@ class _FrostedPill extends StatelessWidget {
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
-                            stops: const [0.0, 0.15, 0.78, 1.0],
+                            stops: const [0.0, 0.15, 0.80, 1.0],
                             colors: [
-                              Colors.white.withValues(alpha: 0.14),
+                              Colors.white.withValues(alpha: 0.22),
                               Colors.transparent,
                               Colors.transparent,
-                              Colors.black.withValues(alpha: 0.025),
+                              Colors.black.withValues(alpha: 0.015),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Crisp bright top-edge highlight for the lensed glass rim.
+                    Positioned(
+                      top: 0,
+                      left: radius * 0.5,
+                      right: radius * 0.5,
+                      child: Container(
+                        height: 1.2,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(1),
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.white.withValues(alpha: 0),
+                              Colors.white.withValues(alpha: 0.65),
+                              Colors.white.withValues(alpha: 0),
                             ],
                           ),
                         ),
@@ -668,6 +1092,7 @@ class _BrightFrostSelection extends StatelessWidget {
   final double height;
   final double corner;
   final double blurSigma;
+  final double saturation;
   final double startOpacity;
   final double endOpacity;
   final double borderOpacity;
@@ -683,6 +1108,7 @@ class _BrightFrostSelection extends StatelessWidget {
     required this.height,
     required this.corner,
     this.blurSigma = 46,
+    this.saturation = 1.0,
     this.startOpacity = 0.30,
     this.endOpacity = 0.16,
     this.borderOpacity = 0.90,
@@ -723,7 +1149,7 @@ class _BrightFrostSelection extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(corner),
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+              filter: _glassBackdrop(blurSigma, saturation),
               child: Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(corner),
@@ -900,8 +1326,8 @@ class _MovingSweepPainter extends CustomPainter {
       end: Alignment.bottomCenter,
       colors: [
         Colors.white.withValues(alpha: 0),
-        Colors.white.withValues(alpha: 0.24 * pulse),
-        Colors.white.withValues(alpha: 0.05 * pulse),
+        Colors.white.withValues(alpha: 0.16 * pulse),
+        Colors.white.withValues(alpha: 0.04 * pulse),
         Colors.white.withValues(alpha: 0),
       ],
       stops: const [0.0, 0.35, 0.62, 1.0],
@@ -959,109 +1385,281 @@ class _GrainPainter extends CustomPainter {
   }
 }
 
-class _GlassCircleButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
+class _AdaptiveGlassActionButton extends StatefulWidget {
+  final GlassActionButtonItem item;
+  final GlassActionButtonMode mode;
   final double size;
   final double blur;
   final double borderWidth;
 
-  const _GlassCircleButton({
-    super.key,
-    required this.icon,
-    required this.onTap,
+  const _AdaptiveGlassActionButton({
+    required this.item,
+    required this.mode,
     required this.size,
     required this.blur,
     required this.borderWidth,
   });
 
   @override
+  State<_AdaptiveGlassActionButton> createState() =>
+      _AdaptiveGlassActionButtonState();
+}
+
+class _AdaptiveGlassActionButtonState
+    extends State<_AdaptiveGlassActionButton> {
+  static Future<bool>? _supportsNativeLiquidGlass;
+  MethodChannel? _buttonChannel;
+
+  @override
+  void dispose() {
+    _buttonChannel?.setMethodCallHandler(null);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = _GlassCircleButton(
+      icon: widget.item.icon ?? _iconForType(widget.item.type),
+      onTap: widget.item.onTap,
+      size: widget.size,
+      blur: widget.blur,
+      borderWidth: widget.borderWidth,
+      semanticLabel: widget.item.semanticLabel,
+    );
+
+    if (widget.mode != GlassActionButtonMode.nativeLiquidGlassOnIOS26 ||
+        defaultTargetPlatform != TargetPlatform.iOS ||
+        (widget.item.type == GlassActionIcon.custom &&
+            widget.item.nativeSymbolName == null)) {
+      return fallback;
+    }
+
+    _supportsNativeLiquidGlass ??= _nativeGlassChannel
+        .invokeMethod<bool>('isLiquidGlassSupported')
+        .then((value) => value ?? false)
+        .catchError((_) => false);
+
+    return FutureBuilder<bool>(
+      future: _supportsNativeLiquidGlass,
+      builder: (context, snapshot) {
+        if (snapshot.data != true) {
+          return fallback;
+        }
+
+        return SizedBox(
+          width: widget.size,
+          height: widget.size,
+          child: UiKitView(
+            viewType: _nativeGlassButtonViewType,
+            creationParamsCodec: const StandardMessageCodec(),
+            creationParams: {
+              'icon': widget.item.type.name,
+              'label': widget.item.semanticLabel,
+              'style': widget.item.nativeStyle.name,
+              'symbolName': widget.item.nativeSymbolName,
+              'size': widget.size,
+            },
+            onPlatformViewCreated: (id) {
+              final channel = MethodChannel(
+                'glass_bottom_navigation/native_glass_button_$id',
+              );
+              _buttonChannel?.setMethodCallHandler(null);
+              _buttonChannel = channel;
+              channel.setMethodCallHandler((call) async {
+                if (call.method == 'tap') {
+                  widget.item.onTap();
+                }
+              });
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  IconData _iconForType(GlassActionIcon type) {
+    return switch (type) {
+      GlassActionIcon.back => Icons.arrow_back_ios_new_rounded,
+      GlassActionIcon.close => Icons.close_rounded,
+      GlassActionIcon.search => Icons.search_rounded,
+      GlassActionIcon.more => Icons.more_horiz_rounded,
+      GlassActionIcon.add => Icons.add_rounded,
+      GlassActionIcon.settings => Icons.settings_rounded,
+      GlassActionIcon.favorite => Icons.favorite_rounded,
+      GlassActionIcon.share => Icons.ios_share_rounded,
+      GlassActionIcon.custom => Icons.circle,
+    };
+  }
+}
+
+/// Wraps a tappable glass surface with interactive press feedback: a subtle
+/// scale-down plus a brightening overlay, mimicking `.glassEffect(.interactive())`
+/// on iOS 26. The overlay is clipped to [borderRadius] so it matches the host
+/// shape (pill, circle, etc.).
+class _Pressable extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+  final BorderRadius borderRadius;
+
+  const _Pressable({
+    required this.child,
+    required this.onTap,
+    this.borderRadius = const BorderRadius.all(Radius.circular(999)),
+  });
+
+  @override
+  State<_Pressable> createState() => _PressableState();
+}
+
+class _PressableState extends State<_Pressable> {
+  bool _down = false;
+
+  void _setDown(bool value) {
+    if (mounted && _down != value) {
+      setState(() => _down = value);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      child: SizedBox(
-        width: size,
-        height: size,
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => _setDown(true),
+      onTapUp: (_) => _setDown(false),
+      onTapCancel: () => _setDown(false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _down ? 0.94 : 1.0,
+        duration: const Duration(milliseconds: 130),
+        curve: Curves.easeOut,
         child: Stack(
           children: [
+            widget.child,
             Positioned.fill(
-              top: 10,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.18),
-                      blurRadius: 24,
-                      offset: const Offset(0, 12),
-                      spreadRadius: -6,
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: _down ? 1 : 0,
+                  duration: const Duration(milliseconds: 130),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: widget.borderRadius,
+                      color: Colors.white.withValues(alpha: 0.18),
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(size),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-                child: Container(
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassCircleButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final double size;
+  final double blur;
+  final double borderWidth;
+  final String? semanticLabel;
+
+  const _GlassCircleButton({
+    required this.icon,
+    required this.onTap,
+    required this.size,
+    required this.blur,
+    required this.borderWidth,
+    this.semanticLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      child: _Pressable(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(size),
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                top: 10,
+                child: DecoratedBox(
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(size),
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Colors.white.withValues(alpha: 0.20),
-                        Colors.white.withValues(alpha: 0.08),
-                      ],
-                    ),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.92),
-                      width: borderWidth,
-                    ),
-                  ),
-                  child: const Stack(
-                    children: [
-                      Positioned.fill(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: Color.fromRGBO(255, 255, 255, 0.08),
-                          ),
-                        ),
-                      ),
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: CustomPaint(
-                            painter: _GrainPainter(opacity: 0.025, count: 400),
-                          ),
-                        ),
-                      ),
-                      Positioned.fill(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Color.fromRGBO(255, 255, 255, 0.18),
-                                Color.fromRGBO(255, 255, 255, 0.05),
-                              ],
-                            ),
-                          ),
-                        ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        blurRadius: 24,
+                        offset: const Offset(0, 12),
+                        spreadRadius: -6,
                       ),
                     ],
                   ),
                 ),
               ),
-            ),
-            Center(
-              child: Icon(
-                icon,
-                size: 26,
-                color: Colors.black.withValues(alpha: 0.90),
+              Positioned.fill(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(size),
+                  child: BackdropFilter(
+                    filter: _glassBackdrop(blur, 1.35),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(size),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.white.withValues(alpha: 0.58),
+                            Colors.white.withValues(alpha: 0.36),
+                          ],
+                        ),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.96),
+                          width: borderWidth,
+                        ),
+                      ),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          IgnorePointer(
+                            child: CustomPaint(
+                              painter: _GrainPainter(
+                                opacity: 0.025,
+                                count: 400,
+                              ),
+                            ),
+                          ),
+                          const DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Color.fromRGBO(255, 255, 255, 0.24),
+                                  Color.fromRGBO(255, 255, 255, 0.08),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ],
+              Center(
+                child: Icon(
+                  icon,
+                  size: 26,
+                  color: Colors.black.withValues(alpha: 0.90),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
