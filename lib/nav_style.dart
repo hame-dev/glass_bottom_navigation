@@ -169,7 +169,7 @@ class GlassBottomNavStyle {
     this.pillBlurSigma = 26,
     this.pillFilmStart = 0.42,
     this.pillFilmEnd = 0.26,
-    this.pillBorderOpacity = 0.62,
+    this.pillBorderOpacity = 0,
     this.showSpecularDot = false,
     this.pillFrostOpacity = 0.09,
     this.backdropSaturation = 1.0,
@@ -187,7 +187,7 @@ class GlassBottomNavStyle {
     this.selectedBlurSigma = 26,
     this.selectedStartOpacity = 0.50,
     this.selectedEndOpacity = 0.30,
-    this.selectedBorderOpacity = 0.66,
+    this.selectedBorderOpacity = 0,
     this.selectedFrostOpacity = 0.16,
     this.selectedRadialOpacity = 0.14,
     this.selectedRadialRadiusFactor = 0.90,
@@ -947,21 +947,6 @@ class _FrostedPill extends StatelessWidget {
       child: Stack(
         children: [
           Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(radius),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.18),
-                    blurRadius: 24,
-                    offset: const Offset(0, 12),
-                    spreadRadius: -6,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Positioned.fill(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(radius),
               child: BackdropFilter(
@@ -978,10 +963,12 @@ class _FrostedPill extends StatelessWidget {
                         tint.withValues(alpha: filmEnd),
                       ],
                     ),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: rimOpacity),
-                      width: 0.7,
-                    ),
+                    border: rimOpacity <= 0
+                        ? null
+                        : Border.all(
+                            color: Colors.white.withValues(alpha: rimOpacity),
+                            width: 0.7,
+                          ),
                   ),
                   child: Stack(
                     children: [
@@ -990,42 +977,6 @@ class _FrostedPill extends StatelessWidget {
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: frostOpacity),
                             borderRadius: BorderRadius.circular(radius),
-                          ),
-                        ),
-                      ),
-                      Positioned.fill(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(radius),
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              stops: const [0.0, 0.30, 0.70, 1.0],
-                              colors: [
-                                Colors.white.withValues(alpha: 0.05),
-                                Colors.transparent,
-                                Colors.transparent,
-                                Colors.white.withValues(alpha: 0.0),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      Positioned.fill(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(radius),
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              stops: const [0.0, 0.30, 0.80, 1.0],
-                              colors: [
-                                Colors.white.withValues(alpha: 0.05),
-                                Colors.transparent,
-                                Colors.transparent,
-                                Colors.black.withValues(alpha: 0.015),
-                              ],
-                            ),
                           ),
                         ),
                       ),
@@ -1114,20 +1065,6 @@ class _BrightFrostSelection extends StatelessWidget {
       height: height,
       child: Stack(
         children: [
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(corner),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.12),
-                    blurRadius: 7,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-            ),
-          ),
           ClipRRect(
             borderRadius: BorderRadius.circular(corner),
             child: BackdropFilter(
@@ -1147,10 +1084,14 @@ class _BrightFrostSelection extends StatelessWidget {
                       ),
                     ],
                   ),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: borderAlpha * 0.85),
-                    width: 0.65,
-                  ),
+                  border: borderAlpha <= 0
+                      ? null
+                      : Border.all(
+                          color: Colors.white.withValues(
+                            alpha: borderAlpha * 0.85,
+                          ),
+                          width: 0.65,
+                        ),
                 ),
                 child: Stack(
                   children: [
@@ -1159,24 +1100,6 @@ class _BrightFrostSelection extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: frostOpacity),
                           borderRadius: BorderRadius.circular(corner),
-                        ),
-                      ),
-                    ),
-                    Positioned.fill(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(corner),
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            stops: const [0.0, 0.2, 0.5, 1.0],
-                            colors: [
-                              Colors.white.withValues(alpha: 0.18),
-                              Colors.white.withValues(alpha: 0.08),
-                              Colors.transparent,
-                              Colors.transparent,
-                            ],
-                          ),
                         ),
                       ),
                     ),
@@ -1198,21 +1121,6 @@ class _BrightFrostSelection extends StatelessWidget {
                           centerAlignment: radialCenter,
                           radius: r,
                           opacity: coreOpacity,
-                        ),
-                      ),
-                    ),
-                    Positioned.fill(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(corner),
-                          gradient: const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Color.fromRGBO(255, 255, 255, 0.10),
-                              Color.fromRGBO(255, 255, 255, 0.03),
-                            ],
-                          ),
                         ),
                       ),
                     ),
