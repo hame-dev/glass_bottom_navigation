@@ -71,12 +71,23 @@ GlassBottomBar(
 )
 ```
 
+## Platform behavior
+
+| Platform | Rendering |
+| --- | --- |
+| iOS 26+ | Native UIKit/SwiftUI Liquid Glass bar and action buttons |
+| iOS below 26 | Flutter-rendered Liquid Glass-style fallback |
+| Android | Flutter-rendered Liquid Glass-style fallback |
+
 For iOS 26+ native Liquid Glass rendering, pass `nativeSymbolName` on
 `GlassBarItem` and custom action buttons so UIKit can render SF Symbols. Android
 and iOS < 26 automatically use the Flutter fallback glass style. Also make sure
 the host app does not opt into UI compatibility mode. If
 `UIDesignRequiresCompatibility` is present in `Info.plist`, set it to `false`
 while testing the latest native design.
+
+To force the Flutter-rendered style on every platform, set
+`actionButtonMode: GlassActionButtonMode.flutter` in `GlassBottomNavStyle`.
 
 ### Use glass action buttons
 
@@ -142,9 +153,14 @@ GlassBottomBar(
     accent: Color(0xFF004D40),
     height: 60,
     widthFactor: 0.90,
+    actionButtonMode: GlassActionButtonMode.nativeLiquidGlassOnIOS26,
   ),
 )
 ```
+
+Some useful fallback styling knobs include `pillTint`, `pillBlurSigma`,
+`pillFilmStart`, `pillFilmEnd`, `selectedStartOpacity`,
+`selectedEndOpacity`, `searchButtonSize`, and `searchGap`.
 
 ## Example app
 
